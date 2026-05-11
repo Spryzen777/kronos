@@ -8,16 +8,17 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  phone     String   @unique
-  password  String
-  firstName String
-  lastName  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  wallet    Wallet?
-  transfers Transfer[]
+  id                String     @id @default(uuid())
+  email             String     @unique
+  phone             String     @unique
+  password          String
+  firstName         String
+  lastName          String
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  wallet            Wallet?
+  sentTransfers     Transfer[] @relation("SentTransfers")
+  receivedTransfers Transfer[] @relation("ReceivedTransfers")
 }
 
 model Wallet {
@@ -33,10 +34,11 @@ model Wallet {
 model Transfer {
   id          String   @id @default(uuid())
   amount      Float
-  currency    String
+  currency    String   @default("USD")
   status      String   @default("pending")
   senderId    String
   recipientId String
-  sender      User     @relation(fields: [senderId], references: [id])
+  sender      User     @relation("SentTransfers", fields: [senderId], references: [id])
+  recipient   User     @relation("ReceivedTransfers", fields: [recipientId], references: [id])
   createdAt   DateTime @default(now())
 }
