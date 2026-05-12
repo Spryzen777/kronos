@@ -1,259 +1,119 @@
+import { useState, useRef } from 'react'
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native'
+import { API } from '../constants/api'
+import { getToken } from '../constants/storage'
+
+type Message = {
+  role: 'user' | 'ai'
+  text: string
+}
 
 export default function ChatScreen() {
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'ai', text: '✨ Hi! Ask me anything about transfers, rates, or fees.' }
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const scrollRef = useRef<ScrollView>(null)
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || loading) return
+
+    setMessages(prev => [...prev, { role: 'user', text }])
+    setInput('')
+    setLoading(true)
+
+    try {
+      const token = await getToken()
+      const res = await fetch(API.chat, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message: text }),
+      })
+      const data = await res.json()
+      setMessages(prev => [...prev, { role: 'ai', text: data.reply || data.error }])
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'ai', text: 'Something went wrong.' }])
+    } finally {
+      setLoading(false)
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100)
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <Text style={styles.title}>AI Assistant</Text>
-
       <Text style={styles.subTitle}>Smart transfer insights powered by AI</Text>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 30 }}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* AI Message */}
-        <View style={styles.aiMessage}>
-          <Text style={styles.aiText}>
-            ✨ Best time to send INR → USD is between 6 PM - 9 PM today for
-            lowest fees.
-          </Text>
-        </View>
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
+          {messages.map((m, i) => (
+            <View
+              key={i}
+              style={m.role === 'ai' ? styles.aiMessage : styles.userMessage}
+            >
+              <Text style={m.role === 'ai' ? styles.aiText : styles.userText}>
+                {m.text}
+              </Text>
+            </View>
+          ))}
+          {loading && (
+            <View style={styles.aiMessage}>
+              <ActivityIndicator color="#8BFF5C" />
+            </View>
+          )}
+        </ScrollView>
 
-        {/* User Message */}
-        <View style={styles.userMessage}>
-          <Text style={styles.userText}>Which transfer route is cheapest?</Text>
-        </View>
-
-        {/* AI Message */}
-        <View style={styles.aiMessage}>
-          <Text style={styles.aiText}>
-            🚀 Crypto Rail currently offers the lowest fee and fastest delivery
-            route.
-          </Text>
-        </View>
-
-        {/* Fraud Alert */}
-        <View style={styles.alertCard}>
-          <Text style={styles.alertTitle}>⚠ Fraud Detection</Text>
-
-          <Text style={styles.alertText}>
-            Recipient activity looks safe. No suspicious transactions detected.
-          </Text>
-        </View>
-
-        {/* AI Insights */}
-        <View style={styles.insightCard}>
-          <Text style={styles.insightTitle}>📊 AI Insight</Text>
-
-          <Text style={styles.insightText}>
-            Sending tomorrow morning may increase fees by 12% due to exchange
-            volatility.
-          </Text>
-        </View>
-
-        {/* Suggested Questions */}
-        <Text style={styles.suggestionTitle}>Suggested Questions</Text>
-
-        <View style={styles.suggestionRow}>
-          <TouchableOpacity style={styles.suggestionButton}>
-            <Text style={styles.suggestionText}>Best exchange rate?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.suggestionButton}>
-            <Text style={styles.suggestionText}>Cheapest route?</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            placeholder="Ask AI anything..."
+            placeholderTextColor="#666"
+            style={styles.input}
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={send}
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={send}>
+            <Text style={styles.sendText}>➤</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.suggestionRow}>
-          <TouchableOpacity style={styles.suggestionButton}>
-            <Text style={styles.suggestionText}>Transfer ETA</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.suggestionButton}>
-            <Text style={styles.suggestionText}>Fraud alerts</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          placeholder="Ask AI anything..."
-          placeholderTextColor="#666"
-          style={styles.input}
-        />
-
-        <TouchableOpacity style={styles.sendButton}>
-          <Text style={styles.sendText}>➤</Text>
-        </TouchableOpacity>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-
-  title: {
-    color: "white",
-    fontSize: 32,
-    fontWeight: "700",
-  },
-
-  subTitle: {
-    color: "#777",
-    marginTop: 8,
-    marginBottom: 25,
-  },
-
-  aiMessage: {
-    backgroundColor: "#1a1025",
-    padding: 18,
-    borderRadius: 22,
-    marginBottom: 18,
-    alignSelf: "flex-start",
-    maxWidth: "88%",
-    borderWidth: 1,
-    borderColor: "#402060",
-  },
-
-  aiText: {
-    color: "white",
-    lineHeight: 22,
-    fontSize: 15,
-  },
-
-  userMessage: {
-    backgroundColor: "#8BFF5C",
-    padding: 18,
-    borderRadius: 22,
-    marginBottom: 18,
-    alignSelf: "flex-end",
-    maxWidth: "85%",
-  },
-
-  userText: {
-    color: "#000",
-    fontWeight: "600",
-    lineHeight: 22,
-  },
-
-  alertCard: {
-    backgroundColor: "#251515",
-    padding: 22,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#552020",
-    marginTop: 10,
-  },
-
-  alertTitle: {
-    color: "#ff8a8a",
-    fontSize: 17,
-    fontWeight: "700",
-  },
-
-  alertText: {
-    color: "#ddd",
-    marginTop: 10,
-    lineHeight: 22,
-  },
-
-  insightCard: {
-    backgroundColor: "#111",
-    padding: 22,
-    borderRadius: 22,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: "#222",
-  },
-
-  insightTitle: {
-    color: "#8BFF5C",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  insightText: {
-    color: "#ddd",
-    marginTop: 10,
-    lineHeight: 22,
-  },
-
-  suggestionTitle: {
-    color: "white",
-    fontSize: 21,
-    fontWeight: "700",
-    marginTop: 30,
-    marginBottom: 18,
-  },
-
-  suggestionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-  },
-
-  suggestionButton: {
-    backgroundColor: "#111",
-    width: "48%",
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#222",
-  },
-
-  suggestionText: {
-    color: "white",
-    textAlign: "center",
-    fontSize: 13,
-  },
-
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 20,
-  },
-
-  input: {
-    flex: 1,
-    backgroundColor: "#111",
-    borderRadius: 18,
-    padding: 18,
-    color: "white",
-    borderWidth: 1,
-    borderColor: "#222",
-  },
-
-  sendButton: {
-    width: 55,
-    height: 55,
-    borderRadius: 18,
-    backgroundColor: "#8BFF5C",
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 12,
-  },
-
-  sendText: {
-    color: "#000",
-    fontSize: 20,
-    fontWeight: "700",
-  },
-});
+  container: { flex: 1, backgroundColor: '#000', paddingHorizontal: 20, paddingTop: 20 },
+  title: { color: 'white', fontSize: 32, fontWeight: '700' },
+  subTitle: { color: '#777', marginTop: 8, marginBottom: 25 },
+  aiMessage: { backgroundColor: '#1a1025', padding: 18, borderRadius: 22, marginBottom: 18, alignSelf: 'flex-start', maxWidth: '88%', borderWidth: 1, borderColor: '#402060' },
+  aiText: { color: 'white', lineHeight: 22, fontSize: 15 },
+  userMessage: { backgroundColor: '#8BFF5C', padding: 18, borderRadius: 22, marginBottom: 18, alignSelf: 'flex-end', maxWidth: '85%' },
+  userText: { color: '#000', fontWeight: '600', lineHeight: 22 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20 },
+  input: { flex: 1, backgroundColor: '#111', borderRadius: 18, padding: 18, color: 'white', borderWidth: 1, borderColor: '#222' },
+  sendButton: { width: 55, height: 55, borderRadius: 18, backgroundColor: '#8BFF5C', justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
+  sendText: { color: '#000', fontSize: 20, fontWeight: '700' },
+})

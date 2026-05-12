@@ -10,10 +10,7 @@ import ratesRoutes from './modules/wallet/rates.routes'
 
 const app = express()
 
-app.use(cors({
-  origin: '*',
-  credentials: true,
-}))
+app.use(cors({ origin: '*', credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
 
@@ -23,9 +20,9 @@ app.get('/health', (req, res) => {
 
 app.use('/api/auth', authRoutes)
 app.use('/api/user', userRoutes)
-app.use('/api/wallet', walletRoutes)
 app.use('/api/transfer', transferRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/wallet', ratesRoutes)
+app.use('/api/wallet', walletRoutes)
 
 export default app
