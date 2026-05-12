@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   SafeAreaView,
   ScrollView,
@@ -6,18 +6,35 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Dimensions,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { LineChart } from 'react-native-chart-kit';
 import { API } from '../constants/api'
 import { getToken, getUser } from '../constants/storage'
+
+const SCREEN_WIDTH = Dimensions.get('window').width
+
+const CURRENCY_PAIRS = [
+  { code: 'INR', flag: '🇮🇳', label: 'USD → INR' },
+  { code: 'AED', flag: '🇦🇪', label: 'USD → AED' },
+  { code: 'EUR', flag: '🇪🇺', label: 'USD → EUR' },
+  { code: 'GBP', flag: '🇬🇧', label: 'USD → GBP' },
+  { code: 'SGD', flag: '🇸🇬', label: 'USD → SGD' },
+]
 
 export default function DashboardScreen() {
   const [balance, setBalance] = useState(0)
   const [user, setUser] = useState<any>(null)
+  const [rates, setRates] = useState<Record<string, number>>({})
+  const [selectedCurrency, setSelectedCurrency] = useState('INR')
+  const [updatedAt, setUpdatedAt] = useState('')
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      loadData()
+    }, [])
+  )
 
   const loadData = async () => {
     try {
@@ -25,19 +42,42 @@ export default function DashboardScreen() {
       const savedUser = await getUser()
       setUser(savedUser)
 
-      const res = await fetch(API.walletBalance, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      const data = await res.json()
-      setBalance(data.balance)
+      const [balRes, ratesRes] = await Promise.all([
+        fetch(API.walletBalance, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(API.rates, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+
+      const balData = await balRes.json()
+      setBalance(balData.balance)
+
+      const ratesData = await ratesRes.json()
+      if (ratesData.rates) {
+        setRates(ratesData.rates)
+        setUpdatedAt(ratesData.updatedAt || '')
+      }
     } catch (err) {
       console.log(err)
     }
   }
 
+  // Generate fake sparkline around real rate
+  const getChartData = (code: string) => {
+    const base = rates[code] || 1
+    const variance = base * 0.01
+    return Array.from({ length: 7 }, (_, i) =>
+      parseFloat((base + (Math.random() - 0.5) * variance).toFixed(4))
+    )
+  }
+
+  const selectedRate = rates[selectedCurrency]
+  const chartData = getChartData(selectedCurrency)
+  const selectedPair = CURRENCY_PAIRS.find(c => c.code === selectedCurrency)!
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+
+        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.hello}>Hello, {user?.firstName || 'User'} 👋</Text>
@@ -48,10 +88,10 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Balance Card */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Total Balance</Text>
           <Text style={styles.balance}>${balance.toFixed(2)}</Text>
-
           <View style={styles.actionsRow}>
             <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/addmoney')}>
               <Text style={styles.actionIcon}>💰</Text>
@@ -72,12 +112,100 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Live Rates Card */}
+        <View style={styles.ratesCard}>
+          <View style={styles.ratesHeader}>
+            <Text style={styles.ratesTitle}>📈 Live Exchange Rates</Text>
+            {updatedAt ? (
+              <Text style={styles.ratesUpdated}>Live</Text>
+            ) : (
+              <Text style={styles.ratesUpdated}>Loading...</Text>
+            )}
+          </View>
+
+          {/* Currency Selector */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.currencyTabs}>
+            {CURRENCY_PAIRS.map(c => (
+              <TouchableOpacity
+                key={c.code}
+                style={[styles.tab, selectedCurrency === c.code && styles.tabActive]}
+                onPress={() => setSelectedCurrency(c.code)}
+              >
+                <Text style={styles.tabFlag}>{c.flag}</Text>
+                <Text style={[styles.tabText, selectedCurrency === c.code && styles.tabTextActive]}>
+                  {c.code}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Rate Display */}
+          {selectedRate ? (
+            <>
+              <View style={styles.rateRow}>
+                <View>
+                  <Text style={styles.rateLabel}>{selectedPair.label}</Text>
+                  <Text style={styles.rateValue}>
+                    1 USD = {selectedRate.toFixed(4)} {selectedCurrency}
+                  </Text>
+                </View>
+                <View style={styles.liveBadge}>
+                  <Text style={styles.liveBadgeText}>● LIVE</Text>
+                </View>
+              </View>
+
+              {/* Sparkline Chart */}
+              <LineChart
+                data={{
+                  labels: ['', '', '', '', '', '', ''],
+                  datasets: [{ data: chartData }]
+                }}
+                width={SCREEN_WIDTH - 80}
+                height={100}
+                withDots={false}
+                withInnerLines={false}
+                withOuterLines={false}
+                withVerticalLabels={false}
+                withHorizontalLabels={false}
+                chartConfig={{
+                  backgroundColor: 'transparent',
+                  backgroundGradientFrom: '#111',
+                  backgroundGradientTo: '#111',
+                  color: () => '#8BFF5C',
+                  strokeWidth: 2,
+                  propsForBackgroundLines: { stroke: 'transparent' },
+                }}
+                bezier
+                style={styles.chart}
+              />
+            </>
+          ) : (
+            <Text style={styles.loadingText}>Fetching live rates...</Text>
+          )}
+
+          {/* All Rates Row */}
+          <View style={styles.allRatesRow}>
+            {CURRENCY_PAIRS.map(c => (
+              <TouchableOpacity key={c.code} style={styles.rateChip} onPress={() => setSelectedCurrency(c.code)}>
+                <Text style={styles.rateChipFlag}>{c.flag}</Text>
+                <Text style={styles.rateChipCode}>{c.code}</Text>
+                <Text style={styles.rateChipValue}>
+                  {rates[c.code] ? rates[c.code].toFixed(2) : '...'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* AI Card */}
         <View style={styles.aiCard}>
           <Text style={styles.aiTitle}>✨ AI Transfer Insight</Text>
           <Text style={styles.aiText}>Best transfer route today is Crypto Rail with lowest fees and fastest delivery.</Text>
         </View>
+
       </ScrollView>
 
+      {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
           <Text style={styles.activeNavIcon}>🏠</Text>
@@ -97,7 +225,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -114,6 +242,28 @@ const styles = StyleSheet.create({
   actionButton: { alignItems: "center" },
   actionIcon: { fontSize: 24 },
   actionText: { color: "white", fontSize: 11, marginTop: 8 },
+  ratesCard: { backgroundColor: "#101010", marginHorizontal: 20, marginTop: 25, borderRadius: 30, padding: 22, borderWidth: 1, borderColor: "#1f1f1f" },
+  ratesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  ratesTitle: { color: "white", fontSize: 18, fontWeight: "700" },
+  ratesUpdated: { color: "#8BFF5C", fontSize: 12, fontWeight: "600" },
+  currencyTabs: { marginBottom: 18 },
+  tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#1a1a1a", marginRight: 8, alignItems: 'center', flexDirection: 'row', gap: 6 },
+  tabActive: { backgroundColor: "#1a2e0a", borderWidth: 1, borderColor: "#8BFF5C" },
+  tabFlag: { fontSize: 16 },
+  tabText: { color: "#666", fontSize: 13, fontWeight: "600" },
+  tabTextActive: { color: "#8BFF5C" },
+  rateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  rateLabel: { color: "#666", fontSize: 13 },
+  rateValue: { color: "white", fontSize: 22, fontWeight: "700", marginTop: 4 },
+  liveBadge: { backgroundColor: "#0a2e0a", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  liveBadgeText: { color: "#8BFF5C", fontSize: 11, fontWeight: "700" },
+  chart: { marginLeft: -10, marginTop: 4 },
+  loadingText: { color: "#666", fontSize: 14, textAlign: 'center', paddingVertical: 20 },
+  allRatesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
+  rateChip: { backgroundColor: "#1a1a1a", borderRadius: 14, padding: 10, alignItems: 'center', minWidth: 60 },
+  rateChipFlag: { fontSize: 18 },
+  rateChipCode: { color: "#666", fontSize: 11, marginTop: 4 },
+  rateChipValue: { color: "#8BFF5C", fontSize: 13, fontWeight: "700", marginTop: 2 },
   aiCard: { backgroundColor: "#1a1025", marginHorizontal: 20, marginTop: 25, borderRadius: 28, padding: 24, borderWidth: 1, borderColor: "#402060" },
   aiTitle: { color: "#c084fc", fontSize: 18, fontWeight: "700" },
   aiText: { color: "#ddd", marginTop: 12, lineHeight: 22 },
@@ -123,4 +273,4 @@ const styles = StyleSheet.create({
   activeNavIcon: { fontSize: 22 },
   navText: { color: "#666", marginTop: 6, fontSize: 12 },
   activeNavText: { color: "#8BFF5C", marginTop: 6, fontSize: 12, fontWeight: "700" },
-});
+})

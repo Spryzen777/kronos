@@ -6,6 +6,7 @@ import userRoutes from './modules/user/user.routes'
 import walletRoutes from './modules/wallet/wallet.routes'
 import transferRoutes from './modules/transfer/transfer.routes'
 import chatRoutes from './modules/chat/chat.routes'
+import ratesRoutes from './modules/wallet/rates.routes'
 
 const app = express()
 
@@ -25,5 +26,6 @@ app.use('/api/user', userRoutes)
 app.use('/api/wallet', walletRoutes)
 app.use('/api/transfer', transferRoutes)
 app.use('/api/chat', chatRoutes)
+app.use('/api/wallet', ratesRoutes)
 
 export default app

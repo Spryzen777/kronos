@@ -3,15 +3,21 @@ import prisma from "../../lib/prisma";
 export const sendMoney = async (
   senderId: string,
   recipientEmail: string,
-  amount: number
+  amount: number,
+  currency: string = "USD"
 ) => {
-  if (amount <= 0) throw new Error("Amount must be positive");
+  if (!amount || isNaN(amount) || amount <= 0)
+    throw new Error("Invalid amount");
 
   const sender = await prisma.wallet.findUnique({ where: { userId: senderId } });
-  if (!sender || sender.balance < amount) throw new Error("Insufficient balance");
+  if (!sender || sender.balance < amount)
+    throw new Error("Insufficient balance");
 
   const recipient = await prisma.user.findUnique({ where: { email: recipientEmail } });
   if (!recipient) throw new Error("Recipient not found");
+
+  if (recipient.id === senderId)
+    throw new Error("Cannot send money to yourself");
 
   const transfer = await prisma.$transaction(async (tx) => {
     await tx.wallet.update({
@@ -29,6 +35,7 @@ export const sendMoney = async (
         senderId,
         recipientId: recipient.id,
         amount,
+        currency,
         status: "SUCCESS",
       },
     });
@@ -41,6 +48,10 @@ export const getHistory = async (userId: string) => {
   return await prisma.transfer.findMany({
     where: {
       OR: [{ senderId: userId }, { recipientId: userId }],
+    },
+    include: {
+      sender: { select: { id: true, email: true, firstName: true, lastName: true } },
+      recipient: { select: { id: true, email: true, firstName: true, lastName: true } },
     },
     orderBy: { createdAt: "desc" },
   });
